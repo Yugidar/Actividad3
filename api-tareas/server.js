@@ -24,23 +24,34 @@ async function guardarTareas(tareas) {
 
 //Rutas 
 //GET TAREAS
-app.get('/',(req,res) => {
-    
+app.get('/tareas',async (req,res) => {
+   
+  var tareas = await obtenerTareas(); 
   //Logica para agregar la tarea al JSON
-  res.send('Bienvenido a la app');
+  res.send(`Bienvenido a la app Las tareas actuales son ${JSON.stringify(tareas)} `);
+
 });
 
 //POST TAREAS
 app.post('/tareas', async(req,res) => {
-  const tareaId = parseInt(req.params.id);
+  //const tareaId = parseInt(req.params.id);
+
+
   let nuevaTarea = req.body
+
   const {titulo, descripcion} = req.body;
   
   var tareas = await obtenerTareas();
-  tareas.push(tareaId,nuevaTarea);
+
+  const indice = Object.keys(tareas)
+  var newindice = indice.length > 0 ? Math.max(...indice.map(Number))+1:1;
+  const tarea = {id: newindice,titulo,descripcion};
+ 
+  //tareas.push(newindice,nuevaTarea);
+  tareas.push(tarea);
 
   await guardarTareas(tareas);
-  
+
   res.status(201).send(`La tarea ${titulo} fue creada exitosamente`)
 });
 
@@ -48,7 +59,7 @@ app.post('/tareas', async(req,res) => {
  //PUT TAREAS
  app.put('/:id', async(req,res) => {
   const tareaId = parseInt(req.params.id);
-
+  var id = [0]
   const datosNuevos = req.body;
 
   const tareas = await obtenerTareas();
@@ -58,11 +69,13 @@ app.post('/tareas', async(req,res) => {
     res.status(401);
   }
 
-  tareas[tareaObjetivo] = {...tareas[tareasObjetivo], ...datosNuevos};
+  tareas[tareaObjetivo] = {...tareas[tareaObjetivo], ...datosNuevos};
 
   await guardarTareas(tareas);
 
   res.json(tareas[tareaObjetivo]);
+
+  res.status(201).send(`se modifico`)
 
 });
 
@@ -75,8 +88,24 @@ app.post('/tareas', async(req,res) => {
 
 
 //DELETE TAREAS
-app.delete('/tareas',(req,res) => {
- 
+app.delete('/:id',async(req,res) => {
+  const tareaId = parseInt(req.params.id);
+  var id = [0]
+
+
+  const tareas = await obtenerTareas();
+
+  const tareaObjetivo = tareas.findIndex((tareita) => tareita.id === tareaId);
+  if (tareaObjetivo === -1){
+    res.status(401);
+  }
+
+  tareas.splice(tareaObjetivo, 1);
+
+  await guardarTareas(tareas);
+
+
+  res.status(200).send(`Tarea ${tareaId} eliminada`);
 });
 
 
