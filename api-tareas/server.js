@@ -3,7 +3,8 @@ const routerPrueba = require("./")
 const app = express();
 const PORT = 3000;
 const fs = require('fs').promises;
-const jwt = require('jsonwebtoken');
+//const jwt = require('jsonwebtoken');
+//const SECRET_KEY = 'blitzcrank';
 
 app.use(express.json());
 
@@ -57,7 +58,7 @@ app.post('/tareas', async(req,res) => {
 
 
  //PUT TAREAS
- app.put('/:id', async(req,res) => {
+ app.put('/tareas/:id', async(req,res) => {
   const tareaId = parseInt(req.params.id);
   var id = [0]
   const datosNuevos = req.body;
@@ -65,8 +66,8 @@ app.post('/tareas', async(req,res) => {
   const tareas = await obtenerTareas();
 
   const tareaObjetivo = tareas.findIndex((tareita) => tareita.id === tareaId);
-  if (!tareaObjetivo){
-    res.status(401);
+  if (tareaObjetivo === -1){
+      return res.status(404).send(`Tarea con id ${tareaId} no encontrada`);
   }
 
   tareas[tareaObjetivo] = {...tareas[tareaObjetivo], ...datosNuevos};
@@ -81,14 +82,8 @@ app.post('/tareas', async(req,res) => {
 
 
 
-  
-
-
-
-
-
 //DELETE TAREAS
-app.delete('/:id',async(req,res) => {
+app.delete('/tareas/:id',async(req,res) => {
   const tareaId = parseInt(req.params.id);
   var id = [0]
 
@@ -113,10 +108,88 @@ app.delete('/:id',async(req,res) => {
 
 
 //AUTENTICACION Y SESIONES
+const authenticateToken = (req, res, next) => {
+    const token = req.header('Authorization')?.split(' ')[1];
 
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
+    if (!token) {
+        return res.status(401).json({ message: 'Acceso denegado. No se proporcionó token.' });
+    }
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Token inválido.' });
+        }
+
+        req.user = user;
+        next();
+    });
+};
+
+//  registro
+app.post('/register', async (req, res) => {
+    const { user, password } = req.body;
+
+    if (!user||!password) {
+    return res.status(400).json({ message: 'Falta user o contraseña' });
+}
+
+try {
+    const data = await fs.readFile('users.json', 'utf8');
+    const users = JSON.parse(data);
+
+    // Verificar si el user ya existe
+    if (users.find(user => user.user === user)) {
+        return res.status(400).json({ message: 'El user ya existe' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Agregar nuevo user al arreglo
+    users.push({ user, password: hashedPassword });
+
+    await fs.writeFile('users.json', JSON.stringify(users));
+
+    console.log('user registrado:', user);
+
+    res.status(201).json({ message: 'user registrado con éxito' });
+} catch (err) {
+    console.error('Error al registrar user:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+}
 });
+
+// login
+app.post('/login', async (req, res) => {
+    const { user, password } = req.body;
+
+    if (!user||!password) {
+    return res.status(400).json({ message: 'Falta user o contraseña' });
+}
+
+try {
+    const data = await fs.readFile('users.json', 'utf8');
+    const users = JSON.parse(data);
+
+    // Buscar el user en el arreglo
+    const user = users.find(user => user.user === user);
+
+    if (!user || !await bcrypt.compare(password, user.password)) {
+        return res.status(400).json({ message: 'user o contraseña incorrectos' });
+    }
+
+    const token = jwt.sign({ user }, SECRET_KEY, { expiresIn: '1h' });
+
+    res.status(200).json({ message: 'Login exitoso', token });
+} catch (err) {
+    console.error('Error al hacer login:', err);
+    res.status(500).json({ message: 'Error del servidor' });
+}
+});
+
+
+//app.listen(PORT, () => {
+//  console.log(`Servidor corriendo en el puerto ${PORT}`);
+//});
 
 
 
