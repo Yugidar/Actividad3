@@ -3,14 +3,41 @@ const routerPrueba = require("./")
 const app = express();
 const PORT = 3000;
 const fs = require('fs').promises;
-//const jwt = require('jsonwebtoken');
-//const SECRET_KEY = 'blitzcrank';
+const jwt = require('jsonwebtoken');
+const SECRET_KEY = 'blitzcrank';
+const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 
 app.use(express.json());
 
+app.listen(PORT, () => {
+    console.log(`Servidor corriendo en el puerto ${PORT}`);
+});
+
+
+
+//AUTENTICACION Y SESIONES
+const autenticarToken = (req, res, next) => {
+    const token = req.header('Authorization')?.split(' ')[1];
+
+    console.log('Token recibido:', token);  
+
+    if (!token) {
+        return res.status(401).json({ message: 'No se puso ningun token' });
+    }
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Token inválido.' });
+        }
+
+        req.user = user;
+        next();
+    });
+};
+
 //Funciones
 //funcion para leer JSON y obtener datos
-
 
 async function obtenerTareas() {
     const data = await fs.readFile('tareas.json', 'utf8');
@@ -25,7 +52,7 @@ async function guardarTareas(tareas) {
 
 //Rutas 
 //GET TAREAS
-app.get('/tareas',async (req,res) => {
+app.get('/tareas',autenticarToken, async (req,res) => {
    
   var tareas = await obtenerTareas(); 
   //Logica para agregar la tarea al JSON
@@ -34,7 +61,7 @@ app.get('/tareas',async (req,res) => {
 });
 
 //POST TAREAS
-app.post('/tareas', async(req,res) => {
+app.post('/tareas', autenticarToken, async(req,res) => {
   //const tareaId = parseInt(req.params.id);
 
 
@@ -58,7 +85,7 @@ app.post('/tareas', async(req,res) => {
 
 
  //PUT TAREAS
- app.put('/tareas/:id', async(req,res) => {
+app.put('/tareas/:id', autenticarToken,  async(req,res) => {
   const tareaId = parseInt(req.params.id);
   var id = [0]
   const datosNuevos = req.body;
@@ -83,7 +110,7 @@ app.post('/tareas', async(req,res) => {
 
 
 //DELETE TAREAS
-app.delete('/tareas/:id',async(req,res) => {
+app.delete('/tareas/:id',autenticarToken, async(req,res) => {
   const tareaId = parseInt(req.params.id);
   var id = [0]
 
@@ -107,92 +134,68 @@ app.delete('/tareas/:id',async(req,res) => {
 
 
 
-//AUTENTICACION Y SESIONES
-const authenticateToken = (req, res, next) => {
-    const token = req.header('Authorization')?.split(' ')[1];
 
-    if (!token) {
-        return res.status(401).json({ message: 'Acceso denegado. No se proporcionó token.' });
-    }
-
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) {
-            return res.status(403).json({ message: 'Token inválido.' });
-        }
-
-        req.user = user;
-        next();
-    });
-};
 
 //  registro
 app.post('/register', async (req, res) => {
-    const { user, password } = req.body;
+    const { usuario, password } = req.body; 
 
-    if (!user||!password) {
-    return res.status(400).json({ message: 'Falta user o contraseña' });
-}
-
-try {
-    const data = await fs.readFile('users.json', 'utf8');
-    const users = JSON.parse(data);
-
-    // Verificar si el user ya existe
-    if (users.find(user => user.user === user)) {
-        return res.status(400).json({ message: 'El user ya existe' });
+    if (!usuario || !password) {
+        return res.status(400).json({ message: 'campos vacios, incluye usuario y contraseña' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    try {
+        const data = await fs.readFile('usuarios.json', 'utf8');
+        const users = JSON.parse(data);
 
-    // Agregar nuevo user al arreglo
-    users.push({ user, password: hashedPassword });
+       
+        if (users.find(u => u.usuario === usuario)) {  
+            return res.status(400).json({ message: 'Usuario en existencia' });
+        }
 
-    await fs.writeFile('users.json', JSON.stringify(users));
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-    console.log('user registrado:', user);
+       
+        users.push({ usuario, password: hashedPassword });  
 
-    res.status(201).json({ message: 'user registrado con éxito' });
-} catch (err) {
-    console.error('Error al registrar user:', err);
-    res.status(500).json({ message: 'Error del servidor' });
-}
+        await fs.writeFile('usuarios.json', JSON.stringify(users));
+
+        console.log('Registro de Usuario', usuario);  
+
+        res.status(201).json({ message: 'Se pudo registrar el usuario' });
+    } catch (err) {
+        console.error('No se pudo registrar al usuario', err);
+        res.status(500).json({ message: 'Error en el servidor' });
+    }
 });
 
 // login
 app.post('/login', async (req, res) => {
-    const { user, password } = req.body;
+    const { usuario, password } = req.body;  
 
-    if (!user||!password) {
-    return res.status(400).json({ message: 'Falta user o contraseña' });
-}
-
-try {
-    const data = await fs.readFile('users.json', 'utf8');
-    const users = JSON.parse(data);
-
-    // Buscar el user en el arreglo
-    const user = users.find(user => user.user === user);
-
-    if (!user || !await bcrypt.compare(password, user.password)) {
-        return res.status(400).json({ message: 'user o contraseña incorrectos' });
+    if (!usuario || !password) {
+        return res.status(400).json({ message: 'campos vacios, incluye usuario y contraseña' });
     }
 
-    const token = jwt.sign({ user }, SECRET_KEY, { expiresIn: '1h' });
+    try {
+        const data = await fs.readFile('usuarios.json', 'utf8'); 
+        const users = JSON.parse(data);
 
-    res.status(200).json({ message: 'Login exitoso', token });
-} catch (err) {
-    console.error('Error al hacer login:', err);
-    res.status(500).json({ message: 'Error del servidor' });
-}
+       
+        const user = users.find(u => u.usuario === usuario); 
+
+        if (!user || !await bcrypt.compare(password, user.password)) {
+            return res.status(400).json({ message: 'Usuario o contraseña invalidos' });
+        }
+
+        const token = jwt.sign({ usuario }, SECRET_KEY, { expiresIn: '1h' });
+
+        res.status(200).json({ message: 'Login exitoso', token });
+    } catch (err) {
+        console.error('No se pudo hacer login', err);
+        res.status(500).json({ message: 'Error en el servidor' });
+    }
 });
-
-
-//app.listen(PORT, () => {
-//  console.log(`Servidor corriendo en el puerto ${PORT}`);
-//});
-
-
-
 
 
 
